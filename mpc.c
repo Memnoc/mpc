@@ -101,6 +101,18 @@ typedef struct {
 
 } mpc_input_t;
 
+
+/* FIX: Helper for ANSI C case-insensitive comparison */
+static int mpc_strcasecmp(const char *s1, const char *s2) {
+  while (*s1 && *s2) {
+    char c1 = (char)tolower((unsigned char)*s1);
+    char c2 = (char)tolower((unsigned char)*s2);
+    if (c1 != c2) { return (int)(c1 - c2); }
+    s1++; s2++;
+  }
+  return (int)(tolower((unsigned char)*s1) - tolower((unsigned char)*s2));
+}
+
 static mpc_input_t *mpc_input_new_string(const char *filename, const char *string) {
 
   mpc_input_t *i = malloc(sizeof(mpc_input_t));
@@ -3686,10 +3698,21 @@ mpc_parser_t *mpca_grammar(int flags, const char *grammar, ...) {
   va_list va;
   va_start(va, grammar);
 
+  /* FIX: tracking pattern */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  st.va_exhausted = 0;
+  st.error_msg = NULL;
+
+
+  if(st.error_msg) {
+      free(st.error_msg);
+    }
+
+  free(st.parsers);
+
 
   res = mpca_grammar_st(grammar, &st);
   free(st.parsers);
@@ -3748,16 +3771,41 @@ static mpc_val_t *mpca_stmt_list_apply_to(mpc_val_t *x, void *s) {
 
   mpca_grammar_st_t *st = s;
   mpca_stmt_t *stmt;
-  mpca_stmt_t **stmts = x;
+  mpca_stmt_t **stmts = (mpca_stmt_t**)x;
   mpc_parser_t *left;
+  mpc_val_t *res = NULL;
 
-  while(*stmts) {
+  while (*stmts) {
     stmt = *stmts;
+
+    /* FIX: If we already found an error, get rid of the remaining statements */
+    if (res != NULL) {
+      free(stmt->ident);
+      free(stmt->name);
+      mpc_soft_delete(stmt->grammar);
+      free(stmt);
+      stmts++;
+      continue;
+    }
+
     left = mpca_grammar_find_parser(stmt->ident, st);
+
+    /* FIX: If this specific rule failed, capture the error and continue draining */
+    if (left->type == MPC_TYPE_FAIL) {
+      res = left;
+      free(stmt->ident);
+      free(stmt->name);
+      mpc_soft_delete(stmt->grammar);
+      free(stmt);
+      stmts++;
+      continue;
+    }
+
     if (st->flags & MPCA_LANG_PREDICTIVE) { stmt->grammar = mpc_predictive(stmt->grammar); }
     if (stmt->name) { stmt->grammar = mpc_expect(stmt->grammar, stmt->name); }
     mpc_optimise(stmt->grammar);
     mpc_define(left, stmt->grammar);
+
     free(stmt->ident);
     free(stmt->name);
     free(stmt);
@@ -3765,8 +3813,7 @@ static mpc_val_t *mpca_stmt_list_apply_to(mpc_val_t *x, void *s) {
   }
 
   free(x);
-
-  return NULL;
+  return res;
 }
 
 static mpc_err_t *mpca_lang_st(mpc_input_t *i, mpca_grammar_st_t *st) {
@@ -3827,11 +3874,26 @@ static mpc_err_t *mpca_lang_st(mpc_input_t *i, mpca_grammar_st_t *st) {
   mpc_optimise(Factor);
   mpc_optimise(Base);
 
-  if (!mpc_parse_input(i, Lang, &r)) {
+if (!mpc_parse_input(i, Lang, &r)) {
     e = r.error;
-  } else {
-    e = NULL;
-  }
+} else {
+    if (r.output) {
+      mpc_parser_t *out_parser = (mpc_parser_t *)r.output;
+      if (out_parser->type == MPC_TYPE_FAIL) {
+          /* FIX: DUPLICATE the message to prevent Segfault after mpc_delete */
+          char *err_msg = malloc(strlen(out_parser->data.fail.m) + 1);
+          strcpy(err_msg, out_parser->data.fail.m);
+
+          e = mpc_err_file(i->filename, err_msg);
+          free(err_msg);
+      } else {
+          e = NULL;
+      }
+      mpc_delete(out_parser);
+    } else {
+      e = NULL;
+    }
+}
 
   mpc_cleanup(6, Lang, Stmt, Grammar, Term, Factor, Base);
 
@@ -3846,13 +3908,23 @@ mpc_err_t *mpca_lang_file(int flags, FILE *f, ...) {
   va_list va;
   va_start(va, f);
 
+  /* FIX: tracking pattern */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  st.va_exhausted = 0;
+  st.error_msg = NULL;
 
   i = mpc_input_new_file("<mpca_lang_file>", f);
   err = mpca_lang_st(i, &st);
+
+  if(st.error_msg) {
+    if (err) { mpc_err_delete(err); }
+    err = mpc_err_file(i->filename, st.error_msg);
+    free(st.error_msg);
+  }
+
   mpc_input_delete(i);
 
   free(st.parsers);
@@ -3868,13 +3940,22 @@ mpc_err_t *mpca_lang_pipe(int flags, FILE *p, ...) {
   va_list va;
   va_start(va, p);
 
+  /* FIX: tracking */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  st.va_exhausted = 0;
+  st.error_msg = NULL;
 
   i = mpc_input_new_pipe("<mpca_lang_pipe>", p);
   err = mpca_lang_st(i, &st);
+
+  if (st.error_msg) {
+    if (err) { mpc_err_delete(err);}
+    err = mpc_err_file(i->filename, st.error_msg);
+    free(st.error_msg);
+  }
   mpc_input_delete(i);
 
   free(st.parsers);
@@ -3882,7 +3963,7 @@ mpc_err_t *mpca_lang_pipe(int flags, FILE *p, ...) {
   return err;
 }
 
-mpc_err_t *mpca_lang(int flags, const char *language, ...) {
+mpc_err_t *mpca_lang_internal(int flags, const char *language, ...) {
 
   mpca_grammar_st_t st;
   mpc_input_t *i;
@@ -3891,13 +3972,24 @@ mpc_err_t *mpca_lang(int flags, const char *language, ...) {
   va_list va;
   va_start(va, language);
 
+  /* FIX: tracking */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  st.va_exhausted = 0;
+  st.error_msg = NULL;
 
   i = mpc_input_new_string("<mpca_lang>", language);
   err = mpca_lang_st(i, &st);
+
+  /*  FIX: final error */
+  if(st.error_msg) {
+    if (err) { mpc_err_delete(err); }
+    err = mpc_err_file(i->filename, st.error_msg);
+    free(st.error_msg);
+  }
+
   mpc_input_delete(i);
 
   free(st.parsers);
@@ -3922,13 +4014,23 @@ mpc_err_t *mpca_lang_contents(int flags, const char *filename, ...) {
 
   va_start(va, filename);
 
+  /* FIX: tracking */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  st.va_exhausted = 0;
+  st.error_msg = NULL;
 
   i = mpc_input_new_file(filename, f);
   err = mpca_lang_st(i, &st);
+
+  if (st.error_msg) {
+    if (err) { mpc_err_delete(err);}
+    err = mpc_err_file(i->filename, st.error_msg);
+    free(st.error_msg);
+  }
+
   mpc_input_delete(i);
 
   free(st.parsers);
