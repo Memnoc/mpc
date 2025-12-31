@@ -1,4 +1,5 @@
 #include "mpc.h"
+#include <string.h>
 
 /*
 ** State Type
@@ -3427,11 +3428,17 @@ mpc_parser_t *mpca_total(mpc_parser_t *a) { return mpc_total(a, (mpc_dtor_t)mpc_
 **             | "(" <grammar> ")"
 */
 
+/* FIX: adding tracking field 
+ * int va_exhausted;
+ * char *error_msg;
+*/
 typedef struct {
   va_list *va;
   int parsers_num;
   mpc_parser_t **parsers;
   int flags;
+  int va_exhausted;
+  char *error_msg;
 } mpca_grammar_st_t;
 
 static mpc_val_t *mpcaf_grammar_or(int n, mpc_val_t **xs) {
