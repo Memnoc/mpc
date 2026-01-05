@@ -3619,6 +3619,8 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
         if (st->error_msg == NULL) {
           /* FIX: Capture error message if doesn't already exist
            * Return the fail parser and cache it
+           * Use both mpca_fail and erro_msg because mpc_fail gets buried 
+           * but error_mag survives in the struct and can be used later
            */
           if (strlen(msg) ==0) {
             st->error_msg = malloc(strlen(x) + 30);
