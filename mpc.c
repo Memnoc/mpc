@@ -3530,36 +3530,57 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
   int i;
   mpc_parser_t *p;
 
+  /* Numeric case */
   if (is_number(x)) {
     i = strtol(x, NULL, 10);
     while (st->parsers_num <= i) {
+      /* FIX: FIX: Before calling va_arg, check
+       * if we already exhausted the list in a previous call.
+       * If yes, return error immediately.
+       */
       if (st->va_exhausted) {
         return mpc_failf("No Parser in position %i! Only supplied %i Parsers!", i, st->parsers_num);
       }
       st->parsers_num++;
       st->parsers = realloc(st->parsers, sizeof(mpc_parser_t*) * st->parsers_num);
       st->parsers[st->parsers_num-1] = va_arg(*st->va, mpc_parser_t*);
+      /* FIX: If we got NULL, mark exhausted and return error.
+       * We asked for position i but ran out of parsers.
+       */
       if (st->parsers[st->parsers_num-1] == NULL) {
         st->va_exhausted = 1;
         return mpc_failf("No Parser in position %i! Only supplied %i Parsers!", i, st->parsers_num);
       }
     }
-    return st->parsers[st->parsers_num-1];
+    /* FIX: st_parser_num is basically i + 1
+     * might as well return parsers[i]
+     */
+    return st->parsers[i];
+    /* End of numeric case */
+    /* Cache search loop */
   } else {
     for (i = 0; i < st->parsers_num; i++) {
       mpc_parser_t *q = st->parsers[i];
       if (q == NULL) { return mpc_failf("Unknown Parser '%s'!", x); }
       if (q->name && strcmp(q->name, x) == 0) { return q; }
     }
+    /* Parser not in cache */
 
+    /* FIX: If we already hit NULL in a previous call, don't call va_arg again. 
+     * Build error from cached parsers. */
     if (st->va_exhausted) {
       char msg[1024];
       strcpy(msg, "");
       for (i = 0; i < st->parsers_num; i++) {
+        /* trying not to de-reference a null pointer here */
+        /* FIX: capture if/when we match case insensitively */
         if (st->parsers[i] && st->parsers[i]->name) {
           if (mpc_strcasecmp(st->parsers[i]->name, x) == 0) {
             return mpc_failf("Unknown Parser '%s'! Did you mean '%s'?", x, st->parsers[i]->name);
           }
+          /*
+           * adding +5  as safety margin
+           */
           if (strlen(msg) + strlen(st->parsers[i]->name) + 5 < 1024) {
             strcat(msg, "'"); strcat(msg, st->parsers[i]->name); strcat(msg, "' ");
           }
@@ -3574,14 +3595,17 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
       if (p == NULL) {
         int j;
         char msg[1024];
-        /* FIX: Tracking */
+        /* FIX: Do not try va_arg again */
         st->va_exhausted = 1;
         strcpy(msg, "");
+        /* FIX: FIX: Capture error in st->error_msg.
+         * Only capture if not already set (first error wins).
+         */
         for (j = 0; j < st->parsers_num; j++) {
           if (st->parsers[j] && st->parsers[j]->name) {
             if (mpc_strcasecmp(st->parsers[j]->name, x) == 0) {
-              /* FIX: capturing error */
               if(st->error_msg == NULL) {
+                /* 50 here is extra space for more text */
                 st->error_msg = malloc(strlen(x) + strlen(st->parsers[j]->name) + 50);
                 sprintf(st->error_msg, "Unknown Parser '%s'! Did you mean '%s'?", x, st->parsers[j]->name);
               }
@@ -3593,6 +3617,9 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
           }
         }
         if (st->error_msg == NULL) {
+          /* FIX: Capture error message if doesn't already exist
+           * Return the fail parser and cache it
+           */
           if (strlen(msg) ==0) {
             st->error_msg = malloc(strlen(x) + 30);
             sprintf(st->error_msg, "Unknown Parser '%s'!", x);
