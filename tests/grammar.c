@@ -258,8 +258,13 @@ void test_qscript(void) {
   
 }
 
+/*  FIX: Catching the error at definition time seems a better choice at this point
+ *  and it makes the tests happy
+*/
 void test_missingrule(void) {
   
+  /* removed int result and mpc_result_t r because I don't call mpc_parse anymore 
+   * added char *err_msg instead */
   mpc_err_t *err;
   char *err_msg;
   mpc_parser_t *Parser = mpc_new("parser");
@@ -267,12 +272,10 @@ void test_missingrule(void) {
   err = mpca_lang(MPCA_LANG_DEFAULT,
     "parser        : /^/ (<missing>)* /$/ ;\n",
     Parser, NULL);
-  
-  /*  FIX: Catching the error at definition time seems a better choice at this point
-   *  and it makes the tests happy
-  */
+ /* expect failure (not success) */ 
   PT_ASSERT(err != NULL);
   err_msg = mpc_err_string(err);
+ /* convert and inspect to see if it contains the expected string */
   PT_ASSERT(strstr(err_msg, "Unknown Parser 'missing'!") != NULL);
   
   free(err_msg);
