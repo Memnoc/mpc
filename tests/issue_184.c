@@ -1,6 +1,10 @@
 #include "ptest.h"
 #include "../mpc.h"
 
+/*  FIX:  Use the macro version to ensure NULL sentinel is added 
+ *  Converts error to string for inspection
+ *  Fuzzy checks the suggestions
+*/
 void test_missing_parser_detection(void) {
   mpc_parser_t* Lispy;
   mpc_err_t* err;
@@ -8,13 +12,10 @@ void test_missing_parser_detection(void) {
 
   Lispy = mpc_new("lispy");
   
-  /* Use the macro version to ensure NULL sentinel is added */
   err = mpca_lang(MPCA_LANG_DEFAULT, " rule : <Lispy> ; ", Lispy);
   
   PT_ASSERT(err != NULL);
-  /* Convert error to string for inspection */
   err_msg = mpc_err_string(err);
-  /* Check for our fuzzy suggestion */
   PT_ASSERT(strstr(err_msg, "Unknown Parser 'Lispy'!") != NULL);
   PT_ASSERT(strstr(err_msg, "Did you mean 'lispy'") != NULL);
   
