@@ -4001,24 +4001,28 @@ mpc_err_t *mpca_lang_internal(int flags, const char *language, ...) {
   va_list va;
   va_start(va, language);
 
-  /* FIX: tracking */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  /* FIX: not exhausted yet | no error yet */
   st.va_exhausted = 0;
   st.error_msg = NULL;
 
   i = mpc_input_new_string("<mpca_lang>", language);
   err = mpca_lang_st(i, &st);
 
-  /*  FIX: final error */
+  /*  FIX: Check if an error was catpured 
+   *  non-NULL means an error occurred
+   *  delete any existing errors (it was causing issues)
+   */
   if(st.error_msg) {
     if (err) { mpc_err_delete(err); }
     err = mpc_err_file(i->filename, st.error_msg);
     free(st.error_msg);
   }
 
+  /* clean wrapper */
   mpc_input_delete(i);
 
   free(st.parsers);
