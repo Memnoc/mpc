@@ -3440,9 +3440,9 @@ mpc_parser_t *mpca_total(mpc_parser_t *a) { return mpc_total(a, (mpc_dtor_t)mpc_
 **             | "(" <grammar> ")"
 */
 
-/* FIX: adding tracking field 
- * int va_exhausted;
- * char *error_msg;
+/*  FIX: adding tracking field 
+ *  int va_exhausted;
+ *  char *error_msg;
 */
 typedef struct {
   va_list *va;
@@ -3534,9 +3534,9 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
   if (is_number(x)) {
     i = strtol(x, NULL, 10);
     while (st->parsers_num <= i) {
-      /* FIX: FIX: Before calling va_arg, check
-       * if we already exhausted the list in a previous call.
-       * If yes, return error immediately.
+      /*  FIX: Before calling va_arg, check
+       *  if we already exhausted the list in a previous call.
+       *  If yes, return error immediately.
        */
       if (st->va_exhausted) {
         return mpc_failf("No Parser in position %i! Only supplied %i Parsers!", i, st->parsers_num);
@@ -3544,16 +3544,16 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
       st->parsers_num++;
       st->parsers = realloc(st->parsers, sizeof(mpc_parser_t*) * st->parsers_num);
       st->parsers[st->parsers_num-1] = va_arg(*st->va, mpc_parser_t*);
-      /* FIX: If we got NULL, mark exhausted and return error.
-       * We asked for position i but ran out of parsers.
+      /*  FIX: If we got NULL, mark exhausted and return error.
+       *  We asked for position i but ran out of parsers.
        */
       if (st->parsers[st->parsers_num-1] == NULL) {
         st->va_exhausted = 1;
         return mpc_failf("No Parser in position %i! Only supplied %i Parsers!", i, st->parsers_num);
       }
     }
-    /* FIX: st_parser_num is basically i + 1
-     * might as well return parsers[i]
+    /*  FIX: st_parser_num is basically i + 1
+     *  might as well return parsers[i]
      */
     return st->parsers[i];
     /* End of numeric case */
@@ -3566,14 +3566,14 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
     }
     /* Parser not in cache */
 
-    /* FIX: If we already hit NULL in a previous call, don't call va_arg again. 
-     * Build error from cached parsers. */
+    /*  FIX: If we already hit NULL in a previous call, don't call va_arg again. 
+     *  Build error from cached parsers. */
     if (st->va_exhausted) {
       char msg[1024];
       strcpy(msg, "");
       for (i = 0; i < st->parsers_num; i++) {
         /* trying not to de-reference a null pointer here */
-        /* FIX: capture if/when we match case insensitively */
+        /*  FIX: capture if/when we match case insensitively */
         if (st->parsers[i] && st->parsers[i]->name) {
           if (mpc_strcasecmp(st->parsers[i]->name, x) == 0) {
             return mpc_failf("Unknown Parser '%s'! Did you mean '%s'?", x, st->parsers[i]->name);
@@ -3595,11 +3595,11 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
       if (p == NULL) {
         int j;
         char msg[1024];
-        /* FIX: Do not try va_arg again */
+        /*  FIX: Do not try va_arg again */
         st->va_exhausted = 1;
         strcpy(msg, "");
-        /* FIX: FIX: Capture error in st->error_msg.
-         * Only capture if not already set (first error wins).
+        /*  FIX: FIX: Capture error in st->error_msg.
+         *  Only capture if not already set (first error wins).
          */
         for (j = 0; j < st->parsers_num; j++) {
           if (st->parsers[j] && st->parsers[j]->name) {
@@ -3617,10 +3617,10 @@ static mpc_parser_t *mpca_grammar_find_parser(char *x, mpca_grammar_st_t *st) {
           }
         }
         if (st->error_msg == NULL) {
-          /* FIX: Capture error message if doesn't already exist
-           * Return the fail parser and cache it
-           * Use both mpca_fail and erro_msg because mpc_fail gets buried 
-           * but error_mag survives in the struct and can be used later
+          /*  FIX: Capture error message if doesn't already exist
+           *  Return the fail parser and cache it
+           *  Use both mpca_fail and erro_msg because mpc_fail gets buried 
+           *  but error_mag survives in the struct and can be used later
            */
           if (strlen(msg) ==0) {
             st->error_msg = malloc(strlen(x) + 30);
@@ -3721,21 +3721,23 @@ mpc_parser_t *mpca_grammar_st(const char *grammar, mpca_grammar_st_t *st) {
 
 }
 
+/*  FIX: Make sure errors captured in mpca_grammar_find_parser get surfaced properly */
 mpc_parser_t *mpca_grammar(int flags, const char *grammar, ...) {
   mpca_grammar_st_t st;
   mpc_parser_t *res;
   va_list va;
   va_start(va, grammar);
 
-  /* FIX: tracking pattern */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  /* initialise  */
   st.va_exhausted = 0;
   st.error_msg = NULL;
 
 
+    /* After parsing: free err_msg if we cannot return it */
   if(st.error_msg) {
       free(st.error_msg);
     }
@@ -3807,7 +3809,7 @@ static mpc_val_t *mpca_stmt_list_apply_to(mpc_val_t *x, void *s) {
   while (*stmts) {
     stmt = *stmts;
 
-    /* FIX: If we already found an error, get rid of the remaining statements */
+    /*  FIX: If we already found an error, get rid of the remaining statements */
     if (res != NULL) {
       free(stmt->ident);
       free(stmt->name);
@@ -3819,7 +3821,7 @@ static mpc_val_t *mpca_stmt_list_apply_to(mpc_val_t *x, void *s) {
 
     left = mpca_grammar_find_parser(stmt->ident, st);
 
-    /* FIX: If this specific rule failed, capture the error and continue draining */
+    /*  FIX: If this specific rule failed, capture the error and continue draining */
     if (left->type == MPC_TYPE_FAIL) {
       res = left;
       free(stmt->ident);
@@ -3909,7 +3911,7 @@ if (!mpc_parse_input(i, Lang, &r)) {
     if (r.output) {
       mpc_parser_t *out_parser = (mpc_parser_t *)r.output;
       if (out_parser->type == MPC_TYPE_FAIL) {
-          /* FIX: DUPLICATE the message to prevent Segfault after mpc_delete */
+          /*  FIX: DUPLICATE the message to prevent Segfault after mpc_delete */
           char *err_msg = malloc(strlen(out_parser->data.fail.m) + 1);
           strcpy(err_msg, out_parser->data.fail.m);
 
@@ -3929,6 +3931,7 @@ if (!mpc_parse_input(i, Lang, &r)) {
   return e;
 }
 
+/*  FIX: Make sure errors catpured in mpca_grammar_find_parser are surfaced properly */
 mpc_err_t *mpca_lang_file(int flags, FILE *f, ...) {
   mpca_grammar_st_t st;
   mpc_input_t *i;
@@ -3937,17 +3940,18 @@ mpc_err_t *mpca_lang_file(int flags, FILE *f, ...) {
   va_list va;
   va_start(va, f);
 
-  /* FIX: tracking pattern */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  /* initialise */
   st.va_exhausted = 0;
   st.error_msg = NULL;
 
   i = mpc_input_new_file("<mpca_lang_file>", f);
   err = mpca_lang_st(i, &st);
 
+  /* after parsing */
   if(st.error_msg) {
     if (err) { mpc_err_delete(err); }
     err = mpc_err_file(i->filename, st.error_msg);
@@ -3961,6 +3965,7 @@ mpc_err_t *mpca_lang_file(int flags, FILE *f, ...) {
   return err;
 }
 
+/*  FIX: Make sure error captured in mpca_grammar_find_parser get surfaced properly */
 mpc_err_t *mpca_lang_pipe(int flags, FILE *p, ...) {
   mpca_grammar_st_t st;
   mpc_input_t *i;
@@ -3969,17 +3974,18 @@ mpc_err_t *mpca_lang_pipe(int flags, FILE *p, ...) {
   va_list va;
   va_start(va, p);
 
-  /* FIX: tracking */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  /* initiaise  */
   st.va_exhausted = 0;
   st.error_msg = NULL;
 
   i = mpc_input_new_pipe("<mpca_lang_pipe>", p);
   err = mpca_lang_st(i, &st);
 
+  /* after parsing */
   if (st.error_msg) {
     if (err) { mpc_err_delete(err);}
     err = mpc_err_file(i->filename, st.error_msg);
@@ -3992,6 +3998,7 @@ mpc_err_t *mpca_lang_pipe(int flags, FILE *p, ...) {
   return err;
 }
 
+  /*  FIX: Make sure errors captured in mpca_grammar_find_parser are surfaced properly */
 mpc_err_t *mpca_lang_internal(int flags, const char *language, ...) {
 
   mpca_grammar_st_t st;
@@ -4005,14 +4012,14 @@ mpc_err_t *mpca_lang_internal(int flags, const char *language, ...) {
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
-  /* FIX: not exhausted yet | no error yet */
+  /* initialise */
   st.va_exhausted = 0;
   st.error_msg = NULL;
 
   i = mpc_input_new_string("<mpca_lang>", language);
   err = mpca_lang_st(i, &st);
 
-  /*  FIX: Check if an error was catpured 
+  /*  After parsing: check if an error was catpured 
    *  non-NULL means an error occurred
    *  delete any existing errors (it was causing issues)
    */
@@ -4030,6 +4037,7 @@ mpc_err_t *mpca_lang_internal(int flags, const char *language, ...) {
   return err;
 }
 
+/*  FIX: Make sure error captured in mpca_grammar_find_parser are surface properly*/
 mpc_err_t *mpca_lang_contents(int flags, const char *filename, ...) {
 
   mpca_grammar_st_t st;
@@ -4047,17 +4055,18 @@ mpc_err_t *mpca_lang_contents(int flags, const char *filename, ...) {
 
   va_start(va, filename);
 
-  /* FIX: tracking */
   st.va = &va;
   st.parsers_num = 0;
   st.parsers = NULL;
   st.flags = flags;
+  /* initialise */
   st.va_exhausted = 0;
   st.error_msg = NULL;
 
   i = mpc_input_new_file(filename, f);
   err = mpca_lang_st(i, &st);
 
+  /* after parsing */
   if (st.error_msg) {
     if (err) { mpc_err_delete(err);}
     err = mpc_err_file(i->filename, st.error_msg);
